@@ -181,9 +181,11 @@ The screen protocol of these speakers is undocumented, and the firmware is easy 
 below was learned on a MiniToo:
 
 - **Keep animations small.** An 8-frame, 20 KB animation froze the screen on a loading spinner, and
-  the power button stopped responding until the speaker restarted. Single frames, the 2-frame amber
-  blink and the 3-frame glow (about 7.5 KB) have been fine. The glow is off by default. If a glow
-  upload ever fails, the monitor switches the glow off by itself and backs off for a minute.
+  the power button stopped responding until the speaker restarted. A 3-frame, 9.5 KB glow (with three
+  busy projects on screen) stalled it too. Uploads up to about 7.5 KB have been fine, so the monitor
+  caps animations there: when the 3-step glow would be bigger, it uses a 2-step glow or a slightly
+  lower JPEG quality, and otherwise shows the screen without the glow. The glow is off by default.
+  If a glow upload ever fails, the monitor switches the glow off by itself and backs off for a minute.
 - **Only one opcode is used for drawing:** the live animation upload (`0x8B`). The community notes
   this project relies on report that several other commands (`0x40`, `0xA3`, `0xA4`, `0xAD`, `0xAE`)
   and custom icon uploads (`0x3C`) can brick the device. Don't add them.

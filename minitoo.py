@@ -41,7 +41,7 @@ SETTINGS = {
     "break_after_minutes": (135, "minutes from the first job of a stretch until the break screen"),
     "break_reset_minutes": (60, "minutes with no new job that end the stretch and clear the break screen"),
     "break_sound": ("coffee", 'break screen sound: "coffee" (footsteps, pour, gulp, aaah) or "chime"'),
-    "glow": (False, "glow running squares in 3 steps; longer animations have frozen the speaker"),
+    "glow": (False, "glow running squares (3 steps, or 2 when the screen is busy); big animations have frozen the speaker"),
     "alert_seconds": (6, "seconds the full-screen NEEDS YOU alert stays up"),
     "done_expire_minutes": (10, "minutes finished sessions stay on screen as grey blocks"),
     "stale_expire_hours": (12, "hours without news before a session is dropped"),
@@ -522,12 +522,16 @@ def draw_break(sessions, stretch_start, finished_today=0, reset_minutes=60, now=
 
 
 GLOW = [1.0, 0.5, 0.0]  # bright, middle, dim; 8-frame animations froze the speaker, so keep this short
+GLOW_SHORT = [1.0, 0.0]  # used when the 3-step glow would be too big
+# Uploads of 9.5 KB and 20 KB have stalled the speaker; about 7.5 KB has been fine.
+MAX_ANIMATION_BYTES = 7600
+ANIMATION_GAP = 10  # seconds between animation uploads
 
 
-def compose(sessions, alert, stretch_start=None, finished_today=0, reset_minutes=60, glow=False):
+def compose(sessions, alert, stretch_start=None, finished_today=0, reset_minutes=60, glow=None, blink=True):
     """Return (frames, frame_ms, mode) for the current state.
 
-    stretch_start is set only when a break is due.
+    stretch_start is set only when a break is due. glow is a list of glow levels, one per frame.
     """
     if alert:
         return [draw_alert(alert, sessions)], 1000, "alert"
@@ -538,8 +542,8 @@ def compose(sessions, alert, stretch_start=None, finished_today=0, reset_minutes
         # Waiting blocks are off on the first frame only, so the last frame is "on"
         # in case the device plays animations only once.
         return [draw_overview(sessions, not waiting or i > 0, glow=g)
-                for i, g in enumerate(GLOW)], 600, "overview"
-    if waiting:
+                for i, g in enumerate(glow)], 600, "overview"
+    if waiting and blink:
         return [draw_overview(sessions, False), draw_overview(sessions, True)], 600, "overview"
     return [draw_overview(sessions)], 1000, "overview"
 
@@ -839,8 +843,16 @@ def daemon():
             stretch = {}
             log("break timer reset: no new job for a while")
         due = cfg["break_screen"] and stretch.get("start") and now - stretch["start"] >= cfg["break_after_minutes"] * 60
-        frames, ms, mode = compose(sessions, alert, stretch["start"] if due else None, len(finished),
-                                   cfg["break_reset_minutes"], glow)
+        # Use the longest animation that stays under the size the speaker has handled.
+        for levels, blink, quality in ((GLOW, True, 80), (GLOW, True, 60), (GLOW_SHORT, True, 80),
+                                       (GLOW_SHORT, True, 60), (None, True, 80), (None, False, 80)):
+            if levels and not glow:
+                continue
+            frames, ms, mode = compose(sessions, alert, stretch["start"] if due else None, len(finished),
+                                       cfg["break_reset_minutes"], levels, blink)
+            payload = animation_payload(frames, ms, quality)
+            if len(frames) == 1 or len(payload) <= MAX_ANIMATION_BYTES:
+                break
         if mode == "break" and not stretch.get("announced"):
             stretch["announced"] = True
             if sound is None and cfg["sound_break"]:
@@ -857,7 +869,7 @@ def daemon():
         if sound and not first:
             play(cfg, sound)
         first = False
-        sig = (mode, ms, tuple(f.tobytes() for f in frames))
+        sig = (mode, ms, quality, tuple(f.tobytes() for f in frames))
 
         if not dev.connected and now >= next_connect:
             try:
@@ -870,9 +882,8 @@ def daemon():
 
         if dev.connected and sig != last_sig and now >= next_upload:
             try:
-                payload = animation_payload(frames, ms)
                 n = dev.upload_animation(payload)
-                last_sig, next_upload = sig, time.time() + 3
+                last_sig, next_upload = sig, time.time() + (ANIMATION_GAP if len(frames) > 1 else 3)
                 log(f"sent {mode} screen: {len(frames)} frame(s), {len(payload)} bytes, {n} chunks")
             except (OSError, TimeoutError, ConnectionError) as e:
                 dev.close()
