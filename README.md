@@ -1,9 +1,15 @@
-# MiniToo Claude Code monitor
+# Divoom Claude Code monitor
 
-A small status light for [Claude Code](https://claude.com/claude-code) on the 160×128 screen of a
-[Divoom MiniToo](https://divoom.com/products/minitoo) Bluetooth speaker. Every running session gets a
-glowing green square with its running time, grouped by project. A session that needs you turns amber
-and plays a chime. After a long stretch of work the speaker tells you to take a break.
+A small status light for [Claude Code](https://claude.com/claude-code) on the screen of a Divoom
+Bluetooth speaker. Every running session gets a glowing green square with its running time, grouped by
+project. A session that needs you turns amber and plays a chime. After a long stretch of work the
+speaker tells you to take a break.
+
+| Speaker | Status |
+|---|---|
+| [Divoom MiniToo](https://divoom.com/products/minitoo) | Supported |
+| [Divoom Tiivoo 2](https://divoom.com/products/divoom-tiivoo-2-photo-album-lyrics-speaker) | Experimental, not tested yet; see [Experimental: Tiivoo 2](#experimental-tiivoo-2) |
+| [Divoom Astrotoo](https://divoom.com/products/divoom-astrotoo-smart-pixel-art-desktop-speaker) | Not supported |
 
 <p align="center">
   <img src="docs/minitoo-photo.jpg" width="640" alt="A Divoom MiniToo on a desk showing the monitor: one project waiting for input, three sessions running and two finished">
@@ -42,7 +48,7 @@ and plays a chime. After a long stretch of work the speaker tells you to take a 
 
 ### Sounds
 
-Played through the MiniToo's own speaker only. Your default audio output is never changed.
+Played through the speaker's own audio output only. Your default audio output is never changed.
 
 | Sound | When |
 |---|---|
@@ -66,7 +72,7 @@ macOS and Windows are not supported yet.
 
 ## Install
 
-1. Pair the MiniToo in your Bluetooth settings and connect it.
+1. Pair the MiniToo (or Tiivoo 2) in your Bluetooth settings and connect it.
 2. Close the Divoom phone app. The speaker accepts only one control connection, and the monitor
    needs it.
 3. Run:
@@ -171,7 +177,8 @@ not supported. It has a 480×480 screen and no published protocol notes yet.
 
 ## Be careful with the speaker
 
-The MiniToo's screen protocol is undocumented and the firmware is easy to upset:
+The screen protocol of these speakers is undocumented, and the firmware is easy to upset. Everything
+below was learned on a MiniToo:
 
 - **Keep animations small.** An 8-frame, 20 KB animation froze the screen on a loading spinner, and
   the power button stopped responding until the speaker restarted. Single frames, the 2-frame amber
@@ -181,6 +188,9 @@ The MiniToo's screen protocol is undocumented and the firmware is easy to upset:
   this project relies on report that several other commands (`0x40`, `0xA3`, `0xA4`, `0xAD`, `0xAE`)
   and custom icon uploads (`0x3C`) can brick the device. Don't add them.
 - If the screen freezes, run `minitoo pause`, then hold the power button for 10–15 seconds.
+
+The command is still called `minitoo` and the files still live in `minitoo-monitor` folders, because
+the project started on the MiniToo. They work the same for the Tiivoo 2.
 
 ## How it works
 
