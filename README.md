@@ -59,7 +59,8 @@ recordings to license.
 - Linux with BlueZ and PipeWire or PulseAudio (`bluetoothctl`, `pactl`, `paplay`) and systemd.
 - Python 3.9+ with Pillow and numpy. On Debian/Ubuntu: `sudo apt install python3-pil python3-numpy`.
 - DejaVu fonts (`fonts-dejavu-core`), installed by default on most distributions.
-- A Divoom MiniToo paired and connected over Bluetooth.
+- A Divoom MiniToo paired and connected over Bluetooth. A Divoom Tiivoo 2 may also work; see
+  [Experimental: Tiivoo 2](#experimental-tiivoo-2).
 
 macOS and Windows are not supported yet.
 
@@ -134,7 +135,8 @@ monitor. Settings are stored in `~/.config/minitoo/config.json`, which you can a
 | `volume` | `100` | Sound volume, as a percent of the speaker's current level. |
 | `quiet_hours` | `[]` | Two hours with no sounds in between, e.g. `22 7`. |
 | `sound_start`, `sound_needs_you`, `sound_done`, `sound_break` | `true` | Turn individual sounds off. |
-| `mac` | empty | Speaker address. Empty means the first paired device named "MiniToo". |
+| `mac` | empty | Speaker address. Empty means the first paired device matching `device_names`. |
+| `device_names` | `MiniToo,Tiivoo` | Name parts to look for among paired devices, in order of preference. |
 
 ### Break timer
 
@@ -146,6 +148,26 @@ minitoo break reset    # took a real break? clear the timer now
 The break timer starts with the first job, shows the break screen after `break_after_minutes`, and
 resets once no new job has come in for `break_reset_minutes`. A new job means a session starting from
 idle, or a finished session starting again.
+
+## Experimental: Tiivoo 2
+
+The [Divoom Tiivoo 2](https://divoom.com/products/divoom-tiivoo-2-photo-album-lyrics-speaker) is
+matched too, but **nobody has tested it with this project yet**. The community protocol notes describe
+it as running the same firmware as the MiniToo and as "byte-for-byte protocol-identical". Its screen
+is *assumed* to be the same 160×128, and the animation upload this project uses hasn't been confirmed
+on it.
+
+If you have one:
+
+1. Pair it, close the Divoom app, and install as above. The monitor picks the first paired MiniToo,
+   then the first Tiivoo. If you have both, `minitoo config device_names Tiivoo` picks the Tiivoo.
+2. Leave `glow` off at first. Run `minitoo send-test` and check that a test screen appears and fits.
+3. If the screen freezes, run `minitoo pause` and restart the speaker. See the warnings below.
+
+Please open an issue with what you saw, a photo if you can, so it can be marked as supported or fixed.
+
+The [Divoom Astrotoo](https://divoom.com/products/divoom-astrotoo-smart-pixel-art-desktop-speaker) is
+not supported. It has a 480×480 screen and no published protocol notes yet.
 
 ## Be careful with the speaker
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """MiniToo session monitor: shows Claude Code session status on a Divoom MiniToo.
 
+The Divoom Tiivoo 2 is matched too, as an experiment: community notes describe it as
+protocol-identical with the same 160x128 screen, but that is untested here.
+
 Subcommands:
   hook <working|waiting|done|end>   called by Claude Code hooks (reads hook JSON on stdin)
   daemon                            keeps the Bluetooth link open and redraws the screen
@@ -49,7 +52,8 @@ SETTINGS = {
     "sound_needs_you": (True, "chime when a session is waiting for you"),
     "sound_done": (True, "chime when a session finishes"),
     "sound_break": (True, "play the break sound when the break screen first appears"),
-    "mac": ("", "speaker Bluetooth address; empty finds the first paired MiniToo"),
+    "mac": ("", "speaker Bluetooth address; empty finds the first paired device in device_names"),
+    "device_names": ("MiniToo,Tiivoo", "comma-separated name parts to look for among paired devices, in order of preference; Tiivoo is experimental"),
     "channel": (1, "Bluetooth RFCOMM control channel"),
 }
 DEFAULTS = {name: default for name, (default, _) in SETTINGS.items()}
@@ -63,17 +67,24 @@ ORDER = {"waiting": 0, "working": 1, "done": 2}
 
 
 def find_speaker(cfg):
-    """Return the speaker's Bluetooth address: from the config, else the first paired MiniToo."""
+    """Return the speaker's Bluetooth address: from the config, else the first paired device whose
+    name contains one of device_names, trying the names in order."""
     if cfg.get("mac"):
         return cfg["mac"]
     try:
         out = subprocess.run(["bluetoothctl", "devices"], capture_output=True, text=True, timeout=5).stdout
     except (OSError, subprocess.SubprocessError):
         return ""
+    devices = []
     for line in out.splitlines():
         parts = line.split(" ", 2)  # "Device XX:XX:XX:XX:XX:XX Divoom MiniToo-Audio"
-        if len(parts) == 3 and parts[0] == "Device" and "minitoo" in parts[2].lower():
-            return parts[1]
+        if len(parts) == 3 and parts[0] == "Device":
+            devices.append((parts[1], parts[2].lower()))
+    for want in str(cfg.get("device_names") or DEFAULTS["device_names"]).split(","):
+        want = want.strip().lower()
+        for mac, name in devices:
+            if want and want in name:
+                return mac
     return ""
 
 
@@ -710,7 +721,7 @@ def muted(cfg):
 
 
 def play(cfg, name):
-    """Play a chime on the MiniToo's speaker only, leaving the default output alone."""
+    """Play a chime on the speaker's own audio output only, leaving the default output alone."""
     if muted(cfg):
         return
     sink = "bluez_output." + cfg["mac"].replace(":", "_")
@@ -754,7 +765,7 @@ def daemon():
     cfg = config()
     cfg["mac"] = find_speaker(cfg)
     while not cfg["mac"]:
-        log("no paired MiniToo found; pair it in your Bluetooth settings or set \"mac\" in the config")
+        log("no paired MiniToo or Tiivoo 2 found; pair it in your Bluetooth settings or set \"mac\" in the config")
         time.sleep(30)
         cfg = config()
         cfg["mac"] = find_speaker(cfg)
@@ -907,7 +918,7 @@ def main(argv):
         ]
         mac = find_speaker(cfg)
         if not mac:
-            print("No paired MiniToo found. Pair it in your Bluetooth settings or set \"mac\" in the config.")
+            print("No paired MiniToo or Tiivoo 2 found. Pair it in your Bluetooth settings or set \"mac\" in the config.")
             return 1
         dev = MiniToo(mac, cfg["channel"])
         dev.connect()
