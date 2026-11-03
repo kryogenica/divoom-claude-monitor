@@ -8,6 +8,8 @@ Subcommands:
   send-test                         sends one test screen to the speaker
   pause | resume                    frees / retakes the speaker's control channel
   status                            prints the sessions the monitor knows about
+  config [NAME [VALUE | --default]] lists, shows or changes settings (applied within a second)
+  break [reset]                     shows the break timer, or restarts it after a real break
 
 Protocol notes come from the community reverse-engineering work at
 https://github.com/bugzmanov/divoom-minitoo (FINDINGS.md). Only commands documented
@@ -30,24 +32,31 @@ PAUSED = CACHE / "paused"
 STRETCH = CACHE / "break.json"
 CONFIG = HOME / ".config" / "minitoo" / "config.json"
 
-DEFAULTS = {
-    "mac": "",                 # empty: use the first paired Bluetooth device named "MiniToo"
-    "channel": 1,
-    "alert_seconds": 6,
-    "done_expire_minutes": 10,
-    "stale_expire_hours": 12,
-    "sound_start": True,       # a session starts, or a finished one starts running again
-    "sound_needs_you": True,   # a session is waiting on you
-    "sound_done": True,        # a session finishes while others are still running
-    "glow": False,             # animate running squares; multi-frame uploads froze the speaker once
-    "break_screen": True,      # show the take-a-break screen after a long stretch of work
-    "break_after_minutes": 135,  # counted from the first job of the stretch
-    "break_reset_minutes": 60,   # the stretch ends after this long with no new job
-    "sound_break": True,       # the break screen first appears
-    "no_folder_label": "This computer",  # sessions started without a project folder
-    "break_sound": "coffee",   # "coffee" (footsteps, pour, gulp, aaah) or "chime"
-    "quiet_hours": [],  # e.g. [22, 7] mutes chimes from 22:00 to 07:00
+# name: (default, description). `minitoo config` lists and changes these.
+SETTINGS = {
+    "break_screen": (True, "show the take-a-break screen after a long stretch of work"),
+    "break_after_minutes": (135, "minutes from the first job of a stretch until the break screen"),
+    "break_reset_minutes": (60, "minutes with no new job that end the stretch and clear the break screen"),
+    "break_sound": ("coffee", 'break screen sound: "coffee" (footsteps, pour, gulp, aaah) or "chime"'),
+    "glow": (False, "glow running squares in 3 steps; longer animations have frozen the speaker"),
+    "alert_seconds": (6, "seconds the full-screen NEEDS YOU alert stays up"),
+    "done_expire_minutes": (10, "minutes finished sessions stay on screen as grey blocks"),
+    "stale_expire_hours": (12, "hours without news before a session is dropped"),
+    "no_folder_label": ("This computer", "project name for sessions opened without a folder"),
+    "volume": (100, "sound volume, percent of the speaker's current level (0-100)"),
+    "quiet_hours": ([], "[start, end] hours with no sounds, e.g. [22, 7]; [] for none"),
+    "sound_start": (True, "chime when a session starts or a finished one starts again"),
+    "sound_needs_you": (True, "chime when a session is waiting for you"),
+    "sound_done": (True, "chime when a session finishes"),
+    "sound_break": (True, "play the break sound when the break screen first appears"),
+    "mac": ("", "speaker Bluetooth address; empty finds the first paired MiniToo"),
+    "channel": (1, "Bluetooth RFCOMM control channel"),
 }
+DEFAULTS = {name: default for name, (default, _) in SETTINGS.items()}
+LIMITS = {"volume": (0, 100), "break_after_minutes": (1, 24 * 60), "break_reset_minutes": (1, 24 * 60),
+          "alert_seconds": (0, 600), "done_expire_minutes": (0, 24 * 60), "stale_expire_hours": (1, 24 * 14),
+          "channel": (1, 30)}
+CHOICES = {"break_sound": ("coffee", "chime")}
 
 W, H = 160, 128
 ORDER = {"waiting": 0, "working": 1, "done": 2}
@@ -68,13 +77,65 @@ def find_speaker(cfg):
     return ""
 
 
-def config():
-    cfg = dict(DEFAULTS)
+def user_config():
+    """Only the settings the user changed."""
     try:
-        cfg.update(json.loads(CONFIG.read_text()))
+        data = json.loads(CONFIG.read_text())
+        return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
-        pass
-    return cfg
+        return {}
+
+
+def config():
+    return {**DEFAULTS, **user_config()}
+
+
+def file_mtime(path):
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return None
+
+
+def parse_setting(name, text):
+    """Turn command-line text into a valid value for a setting, or raise ValueError."""
+    default = DEFAULTS[name]
+    t = text.strip()
+    if isinstance(default, bool):
+        if t.lower() in ("true", "on", "yes", "1"):
+            return True
+        if t.lower() in ("false", "off", "no", "0"):
+            return False
+        raise ValueError("use true or false")
+    if isinstance(default, int):
+        try:
+            v = int(t)
+        except ValueError:
+            raise ValueError("use a whole number") from None
+        lo, hi = LIMITS.get(name, (0, 10 ** 6))
+        if not lo <= v <= hi:
+            raise ValueError(f"use a number from {lo} to {hi}")
+        return v
+    if isinstance(default, list):  # quiet_hours
+        if t.lower() in ("", "[]", "none", "off"):
+            return []
+        try:
+            v = [int(x) for x in t.strip("[]").replace(",", " ").split()]
+        except ValueError:
+            raise ValueError("use two hours like 22 7, or none") from None
+        if len(v) != 2 or not all(0 <= h <= 23 for h in v):
+            raise ValueError("use two hours from 0 to 23, like 22 7")
+        return v
+    if name in CHOICES and t not in CHOICES[name]:
+        raise ValueError("use " + " or ".join(CHOICES[name]))
+    return t
+
+
+def save_user_config(data):
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CONFIG.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    tmp.replace(CONFIG)
 
 
 # ---------------------------------------------------------------- hook side
@@ -659,7 +720,8 @@ def play(cfg, name):
         if not match:
             log(f"chime skipped: speaker audio not connected ({name})")
             return
-        subprocess.Popen(["paplay", f"--device={match}", str(SOUNDS / f"{name}.wav")],
+        volume = max(0, min(100, int(cfg.get("volume", 100))))
+        subprocess.Popen(["paplay", f"--device={match}", f"--volume={65536 * volume // 100}", str(SOUNDS / f"{name}.wav")],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         log(f"chime: {name}")
     except (OSError, subprocess.SubprocessError) as e:
@@ -667,6 +729,22 @@ def play(cfg, name):
 
 
 # ---------------------------------------------------------------- daemon
+
+def read_stretch():
+    """The break timer: {"start", "last_job", "announced"}, or {} when no stretch is running."""
+    try:
+        data = json.loads(STRETCH.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def write_stretch(stretch):
+    CACHE.mkdir(parents=True, exist_ok=True)
+    tmp = STRETCH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(stretch))
+    tmp.replace(STRETCH)
+
 
 def log(msg):
     print(time.strftime("%H:%M:%S"), msg, flush=True)
@@ -690,13 +768,23 @@ def daemon():
     finished, finished_day = set(), time.strftime("%Y-%m-%d")
     names = AppNames(cfg)
     glow = cfg["glow"]
-    try:
-        stretch = json.loads(STRETCH.read_text())
-    except (OSError, ValueError):
-        stretch = {}
+    stretch, stretch_mtime = read_stretch(), file_mtime(STRETCH)
+    cfg_mtime = file_mtime(CONFIG)
     log(f"monitor started for {cfg['mac']} channel {cfg['channel']}")
     while True:
         now = time.time()
+        if file_mtime(CONFIG) != cfg_mtime:  # `minitoo config` or a hand edit
+            cfg_mtime = file_mtime(CONFIG)
+            new = config()
+            new["mac"] = find_speaker(new) or cfg["mac"]
+            if (new["mac"], new["channel"]) != (cfg["mac"], cfg["channel"]):
+                dev.close()
+                dev, next_connect = MiniToo(new["mac"], new["channel"]), 0.0
+            cfg, glow, names, last_sig = new, new["glow"], AppNames(new), None
+            log("settings reloaded")
+        if file_mtime(STRETCH) != stretch_mtime:  # `minitoo break reset`
+            stretch, stretch_mtime = read_stretch(), file_mtime(STRETCH)
+            log("break timer changed from the command line")
         if PAUSED.exists():
             if dev.connected:
                 dev.close()
@@ -748,9 +836,8 @@ def daemon():
                 coffee = cfg.get("break_sound") == "coffee" and (SOUNDS / "take-a-break.wav").exists()
                 sound = "take-a-break" if coffee else "all-done"
         if stretch != old:
-            tmp = STRETCH.with_suffix(".tmp")
-            tmp.write_text(json.dumps(stretch))
-            tmp.replace(STRETCH)
+            write_stretch(stretch)
+            stretch_mtime = file_mtime(STRETCH)
         if sound is None:
             if finished_now and cfg["sound_done"]:
                 sound = "all-done"
@@ -848,8 +935,82 @@ def main(argv):
         if PAUSED.exists():
             print("(paused)")
         return 0
+    if cmd == "config":
+        return config_command(argv[1:])
+    if cmd == "break":
+        return break_command(argv[1:])
     print(__doc__)
     return 64
+
+
+def show_value(v):
+    return json.dumps(v)
+
+
+def config_command(args):
+    mine = user_config()
+    if not args:
+        print(f"Settings ({CONFIG}). * = changed from the default.")
+        print("Change one with: minitoo config NAME VALUE    Back to default: minitoo config NAME --default\n")
+        for name, (default, desc) in SETTINGS.items():
+            value = mine.get(name, default)
+            mark = "*" if name in mine and value != default else " "
+            print(f"  {name:<20} {show_value(value):<16}{mark} {desc}")
+        return 0
+    name = args[0]
+    if name not in SETTINGS:
+        import difflib
+        near = difflib.get_close_matches(name, SETTINGS, n=1)
+        print(f"No setting called {name!r}." + (f" Did you mean {near[0]}?" if near else "") +
+              " Run 'minitoo config' to list them.")
+        return 2
+    default, desc = SETTINGS[name]
+    if len(args) == 1:
+        print(f"{name} = {show_value(mine.get(name, default))}   (default {show_value(default)})\n  {desc}")
+        return 0
+    if args[1] == "--default":
+        mine.pop(name, None)
+        save_user_config(mine)
+        print(f"{name} is back to its default, {show_value(default)}.")
+        return 0
+    try:
+        value = parse_setting(name, " ".join(args[1:]))
+    except ValueError as e:
+        print(f"Can't set {name}: {e}.")
+        return 2
+    mine[name] = value
+    save_user_config(mine)
+    print(f"{name} = {show_value(value)}. The monitor picks this up within a second.")
+    return 0
+
+
+def break_command(args):
+    cfg = config()
+    if args[:1] == ["reset"]:
+        write_stretch({})
+        print("Break timer cleared. It starts again with the next job.")
+        return 0
+    if args:
+        print("Usage: minitoo break [reset]")
+        return 64
+    st = read_stretch()
+    if not cfg["break_screen"]:
+        print("The break screen is off (minitoo config break_screen true turns it on).")
+    if not st.get("start"):
+        print("No stretch running. The break timer starts with the next job.")
+        return 0
+    now = time.time()
+    hm = lambda t: time.strftime("%H:%M", time.localtime(t))
+    due = st["start"] + cfg["break_after_minutes"] * 60
+    clears = st["last_job"] + cfg["break_reset_minutes"] * 60
+    print(f"Working since {hm(st['start'])} ({fmt_span(now - st['start'])}).")
+    if now < due:
+        print(f"Break screen at {hm(due)}, in {fmt_span(due - now)}.")
+    else:
+        print(f"Break screen due since {hm(due)}.")
+    print(f"Last new job at {hm(st['last_job'])}. With no new job, the timer resets at {hm(clears)}.")
+    print("Took a real break? Run 'minitoo break reset'.")
+    return 0
 
 
 if __name__ == "__main__":

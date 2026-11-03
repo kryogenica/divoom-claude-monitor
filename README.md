@@ -5,6 +5,10 @@ A small status light for [Claude Code](https://claude.com/claude-code) on the 16
 glowing green square with its running time, grouped by project. A session that needs you turns amber
 and plays a chime. After a long stretch of work the speaker tells you to take a break.
 
+<p align="center">
+  <img src="docs/minitoo-photo.jpg" width="640" alt="A Divoom MiniToo on a desk showing the monitor: one project waiting for input, three sessions running and two finished">
+</p>
+
 <p>
   <img src="docs/overview.gif" width="320" alt="Overview: projects with running, waiting and finished sessions">
   <img src="docs/alert.png" width="320" alt="Full-screen amber alert when a session needs you">
@@ -93,42 +97,55 @@ python3 install.py --uninstall
 minitoo status    # what the monitor knows about
 minitoo pause     # free the speaker so the Divoom app can connect
 minitoo resume    # take it back
+minitoo config    # list and change settings (see below)
+minitoo break     # see or reset the break timer
 journalctl --user -u minitoo-monitor -f
 ```
 
 ## Settings
 
-Optional. Create `~/.config/minitoo/config.json` with any of these, then run
-`systemctl --user restart minitoo-monitor`:
+Change settings with the `minitoo config` command. The monitor applies a change within a second, with
+no restart:
 
-```json
-{
-  "mac": "",
-  "glow": true,
-  "break_screen": true,
-  "break_after_minutes": 135,
-  "break_reset_minutes": 60,
-  "break_sound": "coffee",
-  "quiet_hours": [22, 7],
-  "no_folder_label": "This computer",
-  "sound_start": true,
-  "sound_needs_you": true,
-  "sound_done": true,
-  "sound_break": true
-}
+```bash
+minitoo config                            # list every setting, its value and what it does
+minitoo config break_after_minutes 90     # break screen after 1 h 30 m instead of 2 h 15 m
+minitoo config break_reset_minutes 30     # a 30-minute pause counts as a break
+minitoo config quiet_hours 22 7           # no sounds from 22:00 to 07:00
+minitoo config volume 60                  # quieter chimes
+minitoo config glow on
+minitoo config volume --default           # back to the default
 ```
+
+Values are checked before they're saved, so a typo gets a clear message instead of a broken
+monitor. Settings are stored in `~/.config/minitoo/config.json`, which you can also edit by hand.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `mac` | `""` | Speaker address. Empty means the first paired device named "MiniToo". |
-| `glow` | `false` | The three-step glow on running squares. See the warning below. |
 | `break_screen` | `true` | Turns the take-a-break screen on or off. |
-| `break_after_minutes` | `135` | How long after the first job the break screen appears. |
-| `break_reset_minutes` | `60` | How long without a new job before the break timer resets. |
-| `break_sound` | `"coffee"` | `"coffee"` or `"chime"`. |
-| `quiet_hours` | `[]` | `[start, end]` hours with no sounds, e.g. `[22, 7]`. |
-| `no_folder_label` | `"This computer"` | Project name for sessions opened without a folder. |
-| `sound_*` | `true` | Turn individual sounds off. |
+| `break_after_minutes` | `135` | Minutes from the first job of a stretch until the break screen. |
+| `break_reset_minutes` | `60` | Minutes with no new job that end the stretch and clear the break screen. |
+| `break_sound` | `coffee` | `coffee` (footsteps, pour, gulp, "aaah") or `chime`. |
+| `glow` | `false` | The three-step glow on running squares. See the warning below. |
+| `alert_seconds` | `6` | How long the full-screen NEEDS YOU alert stays up. |
+| `done_expire_minutes` | `10` | How long finished sessions stay as grey blocks. |
+| `stale_expire_hours` | `12` | Drop sessions that haven't reported anything for this long. |
+| `no_folder_label` | `This computer` | Project name for sessions opened without a folder. |
+| `volume` | `100` | Sound volume, as a percent of the speaker's current level. |
+| `quiet_hours` | `[]` | Two hours with no sounds in between, e.g. `22 7`. |
+| `sound_start`, `sound_needs_you`, `sound_done`, `sound_break` | `true` | Turn individual sounds off. |
+| `mac` | empty | Speaker address. Empty means the first paired device named "MiniToo". |
+
+### Break timer
+
+```bash
+minitoo break          # when the stretch started, when the break screen is due, when it resets
+minitoo break reset    # took a real break? clear the timer now
+```
+
+The break timer starts with the first job, shows the break screen after `break_after_minutes`, and
+resets once no new job has come in for `break_reset_minutes`. A new job means a session starting from
+idle, or a finished session starting again.
 
 ## Be careful with the speaker
 
