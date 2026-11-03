@@ -72,8 +72,8 @@ macOS and Windows are not supported yet.
 3. Run:
 
 ```bash
-git clone https://github.com/kryogenica/minitoo-claude-monitor.git
-cd minitoo-claude-monitor
+git clone https://github.com/kryogenica/divoom-claude-monitor.git
+cd divoom-claude-monitor
 python3 install.py
 ```
 
