@@ -42,8 +42,8 @@ speaker tells you to take a break.
 - **Clawd (optional).** Once nothing has run for 20 minutes, Clawd, the Claude Code mascot, comes out to
   play on the screen. See [Clawd](#clawd).
 - **Take-a-break screen.** The timer starts with the first job. After 2 h 15 m the screen switches to
-  a coffee mug and plays a short footsteps-pour-gulp-"aaah" sound. It clears once no new job has come
-  in for an hour. Anything that needs you still takes over the screen.
+  a coffee mug and plays a short footsteps-pour-gulp-"aaah" sound. After 5 minutes it clears by itself,
+  and the timer starts over with the next job. Anything that needs you still takes over the screen.
 
 <p>
   <img src="docs/overview-compact.gif" width="320" alt="Compact layout with many projects">
@@ -137,6 +137,7 @@ monitor. Settings are stored in `~/.config/minitoo/config.json`, which you can a
 |---|---|---|
 | `break_screen` | `true` | Turns the take-a-break screen on or off. |
 | `break_after_minutes` | `135` | Minutes from the first job of a stretch until the break screen. |
+| `break_screen_minutes` | `5` | Minutes the break screen stays up before it clears and the timer starts over. `0` keeps it up until the stretch ends. |
 | `break_reset_minutes` | `60` | Minutes with no new job that end the stretch and clear the break screen. |
 | `break_sound` | `coffee` | `coffee` (footsteps, pour, gulp, "aaah") or `chime`. |
 | `glow` | `false` | The three-step glow on running squares. See the warning below. |
@@ -160,9 +161,10 @@ minitoo break          # when the stretch started, when the break screen is due,
 minitoo break reset    # took a real break? clear the timer now
 ```
 
-The break timer starts with the first job, shows the break screen after `break_after_minutes`, and
-resets once no new job has come in for `break_reset_minutes`. A new job means a session starting from
-idle, or a finished session starting again.
+The break timer starts with the first job and shows the break screen after `break_after_minutes`. The
+screen stays up for `break_screen_minutes`, then clears by itself, and the timer starts over with the
+next job. The timer also resets once no new job has come in for `break_reset_minutes`. A new job means a
+session starting from idle, or a finished session starting again.
 
 ## Clawd
 

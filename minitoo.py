@@ -41,6 +41,7 @@ CONFIG = HOME / ".config" / "minitoo" / "config.json"
 SETTINGS = {
     "break_screen": (True, "show the take-a-break screen after a long stretch of work"),
     "break_after_minutes": (135, "minutes from the first job of a stretch until the break screen"),
+    "break_screen_minutes": (5, "minutes the break screen stays up before it clears and the timer starts over; 0 keeps it up"),
     "break_reset_minutes": (60, "minutes with no new job that end the stretch and clear the break screen"),
     "break_sound": ("coffee", 'break screen sound: "coffee" (footsteps, pour, gulp, aaah) or "chime"'),
     "glow": (False, "glow running squares (3 steps, or 2 when the screen is busy); big animations have frozen the speaker"),
@@ -62,7 +63,7 @@ SETTINGS = {
     "channel": (1, "Bluetooth RFCOMM control channel"),
 }
 DEFAULTS = {name: default for name, (default, _) in SETTINGS.items()}
-LIMITS = {"volume": (0, 100), "break_after_minutes": (1, 24 * 60), "break_reset_minutes": (1, 24 * 60),
+LIMITS = {"volume": (0, 100), "break_after_minutes": (1, 24 * 60), "break_screen_minutes": (0, 24 * 60), "break_reset_minutes": (1, 24 * 60),
           "alert_seconds": (0, 600), "done_expire_minutes": (0, 24 * 60), "stale_expire_hours": (1, 24 * 14),
           "channel": (1, 30), "clawd_after_minutes": (1, 24 * 60), "clawd_awake_minutes": (1, 24 * 60)}
 CHOICES = {"break_sound": ("coffee", "chime")}
@@ -753,7 +754,7 @@ def play(cfg, name):
 # ---------------------------------------------------------------- daemon
 
 def read_stretch():
-    """The break timer: {"start", "last_job", "announced"}, or {} when no stretch is running."""
+    """The break timer: {"start", "last_job", "announced", "shown_at"}, or {} when no stretch is running."""
     try:
         data = json.loads(STRETCH.read_text())
         return data if isinstance(data, dict) else {}
@@ -859,6 +860,11 @@ def daemon():
         elif stretch.get("start") and now - stretch["last_job"] >= cfg["break_reset_minutes"] * 60:
             stretch = {}
             log("break timer reset: no new job for a while")
+        # The break screen clears itself after a few minutes; the timer then starts over with the next job.
+        shown = stretch.get("shown_at")
+        if shown and cfg["break_screen_minutes"] and now - shown >= cfg["break_screen_minutes"] * 60:
+            stretch = {}
+            log(f"break screen cleared after {cfg['break_screen_minutes']} min; the timer starts over with the next job")
         due = cfg["break_screen"] and stretch.get("start") and now - stretch["start"] >= cfg["break_after_minutes"] * 60
 
         # Clawd comes out once nothing has run for a while, or on demand with `minitoo clawd`.
@@ -899,6 +905,8 @@ def daemon():
                 payload = animation_payload(frames, ms, quality)
                 if len(frames) == 1 or len(payload) <= MAX_ANIMATION_BYTES:
                     break
+        if mode == "break":
+            stretch.setdefault("shown_at", now)
         if mode == "break" and not stretch.get("announced"):
             stretch["announced"] = True
             if sound is None and cfg["sound_break"]:
@@ -1105,6 +1113,9 @@ def break_command(args):
         print(f"Break screen at {hm(due)}, in {fmt_span(due - now)}.")
     else:
         print(f"Break screen due since {hm(due)}.")
+    if st.get("shown_at") and cfg["break_screen_minutes"]:
+        gone = st["shown_at"] + cfg["break_screen_minutes"] * 60
+        print(f"Break screen up since {hm(st['shown_at'])}; it clears by itself at {hm(gone)}.")
     print(f"Last new job at {hm(st['last_job'])}. With no new job, the timer resets at {hm(clears)}.")
     print("Took a real break? Run 'minitoo break reset'.")
     return 0
