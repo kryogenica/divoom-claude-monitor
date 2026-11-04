@@ -1,7 +1,9 @@
 """Clawd, the Claude Code mascot, living on the speaker's screen while nothing is running.
 
-Clawd is drawn from Claude Code's own block-character art and pose tables (eyes, arms, feet and the
-turn-around frames), so it matches the one in the terminal.
+Clawd belongs to Anthropic: it is Anthropic's mascot for Claude Code, and this project claims no
+ownership of it. It is drawn here from the block-character art and pose tables that Claude Code itself
+ships (eyes, arms, feet and the turn-around frames), so it matches the one in the terminal. The MIT
+license of this project covers its own code only, not Clawd.
 
 How Clawd decides what to do
 ----------------------------

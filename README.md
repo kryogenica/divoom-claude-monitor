@@ -21,6 +21,8 @@ speaker tells you to take a break.
 </p>
 
 > This is a community project. It is not made by, endorsed by or affiliated with Divoom or Anthropic.
+> Clawd, the Claude Code mascot shown on the idle screen, belongs to Anthropic. Claude and Claude Code
+> are Anthropic's trademarks, and Divoom, MiniToo and Tiivoo are Divoom's.
 
 ## What it shows
 
@@ -187,8 +189,10 @@ own random choices, like how many hops, which dance, or whether the firefly gets
 On the speaker, Clawd moves in short 2-frame clips, one every 10 seconds, each under the animation size
 cap. After `clawd_awake_minutes` it falls asleep, and the screen then changes once a minute.
 
-Clawd is Anthropic's mascot for Claude Code. This project only draws it on your own speaker and is not
-affiliated with Anthropic.
+**Clawd belongs to Anthropic.** It is Anthropic's mascot for Claude Code, and its design and name are
+Anthropic's. This project doesn't claim any ownership of Clawd and isn't affiliated with or endorsed by
+Anthropic. It only redraws the poses that Claude Code already ships, so you can see Clawd on your own
+speaker. If Anthropic asks, Clawd will be removed from this project.
 
 ## Experimental: Tiivoo 2
 
@@ -256,4 +260,6 @@ included.
 
 ## License
 
-[MIT](LICENSE)
+The code in this project is under the [MIT](LICENSE) license. That license covers this project's own code
+only. It gives no rights to Clawd, which belongs to Anthropic, or to Anthropic's or Divoom's names and
+trademarks.
