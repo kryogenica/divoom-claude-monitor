@@ -104,7 +104,7 @@ def install(start=True):
         return 1
     print("Installing the MiniToo monitor")
     APP.mkdir(parents=True, exist_ok=True)
-    for name in ("minitoo.py", "make_break_sound.py"):
+    for name in ("minitoo.py", "clawd.py", "make_break_sound.py"):
         shutil.copy2(HERE / name, APP / name)
     (APP / "minitoo.py").chmod(0o755)
     say(f"program: {APP}")

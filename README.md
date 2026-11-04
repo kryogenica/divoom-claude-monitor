@@ -37,6 +37,8 @@ speaker tells you to take a break.
   row each, and past seven rows the rest are counted as `+N MORE PROJECTS`.
 - **Needs-you alert.** When a session starts waiting, the whole screen turns amber for a few seconds
   with the project, the session title and what it is asking for.
+- **Clawd (optional).** Once nothing has run for 20 minutes, Clawd, the Claude Code mascot, comes out to
+  play on the screen. See [Clawd](#clawd).
 - **Take-a-break screen.** The timer starts with the first job. After 2 h 15 m the screen switches to
   a coffee mug and plays a short footsteps-pour-gulp-"aaah" sound. It clears once no new job has come
   in for an hour. Anything that needs you still takes over the screen.
@@ -106,6 +108,7 @@ minitoo pause     # free the speaker so the Divoom app can connect
 minitoo resume    # take it back
 minitoo config    # list and change settings (see below)
 minitoo break     # see or reset the break timer
+minitoo clawd     # bring Clawd out for 5 minutes, even while busy (minitoo clawd off to stop)
 journalctl --user -u minitoo-monitor -f
 ```
 
@@ -121,6 +124,7 @@ minitoo config break_reset_minutes 30     # a 30-minute pause counts as a break
 minitoo config quiet_hours 22 7           # no sounds from 22:00 to 07:00
 minitoo config volume 60                  # quieter chimes
 minitoo config glow on
+minitoo config clawd on                   # Clawd comes out when nothing has run for a while
 minitoo config volume --default           # back to the default
 ```
 
@@ -134,6 +138,9 @@ monitor. Settings are stored in `~/.config/minitoo/config.json`, which you can a
 | `break_reset_minutes` | `60` | Minutes with no new job that end the stretch and clear the break screen. |
 | `break_sound` | `coffee` | `coffee` (footsteps, pour, gulp, "aaah") or `chime`. |
 | `glow` | `false` | The three-step glow on running squares. See the warning below. |
+| `clawd` | `false` | Show Clawd once nothing has run for a while. See [Clawd](#clawd). |
+| `clawd_after_minutes` | `20` | Minutes with nothing running or waiting before Clawd comes out. |
+| `clawd_awake_minutes` | `60` | Minutes Clawd plays before it falls asleep. |
 | `alert_seconds` | `6` | How long the full-screen NEEDS YOU alert stays up. |
 | `done_expire_minutes` | `10` | How long finished sessions stay as grey blocks. |
 | `stale_expire_hours` | `12` | Drop sessions that haven't reported anything for this long. |
@@ -154,6 +161,34 @@ minitoo break reset    # took a real break? clear the timer now
 The break timer starts with the first job, shows the break screen after `break_after_minutes`, and
 resets once no new job has come in for `break_reset_minutes`. A new job means a session starting from
 idle, or a finished session starting again.
+
+## Clawd
+
+<p align="center">
+  <img src="docs/clawd.gif" width="660" alt="Clawd coding on a laptop, chasing a firefly, holding an umbrella in the rain, dancing, stargazing and kicking a ball">
+</p>
+
+Turn it on with `minitoo config clawd on`. When no session has been running or waiting for
+`clawd_after_minutes`, Clawd takes over the screen until the next job starts. Alerts still come first.
+To see it right away, run `minitoo clawd` (5 minutes) or `minitoo clawd 15`.
+
+Clawd is drawn from Claude Code's own block-character art and poses, so it matches the one in your
+terminal. It has 14 behaviours: strolling, waving, hopping and spinning, spinning till dizzy, dancing,
+chasing a firefly, kicking a ball, coding on a laptop, thinking up an idea, coffee, an umbrella in the
+rain, stargazing and wishing on a shooting star, peekaboo, and napping with a snore bubble.
+
+It never runs the same way twice. Clawd has four needs that drift over time: energy, play, curiosity and
+focus. Each time it finishes something, it picks the behaviour that best fits its needs, with a random
+nudge, and rarely repeats what it did in the last minute or so. Active play uses energy; naps and coffee
+restore it. Energy also sinks at night (20:00–06:00), when the sky turns dark with stars and a moon and
+fireflies come out. Rain showers and shooting stars break in at random. Every behaviour also makes its
+own random choices, like how many hops, which dance, or whether the firefly gets caught.
+
+On the speaker, Clawd moves in short 2-frame clips, one every 10 seconds, each under the animation size
+cap. After `clawd_awake_minutes` it falls asleep, and the screen then changes once a minute.
+
+Clawd is Anthropic's mascot for Claude Code. This project only draws it on your own speaker and is not
+affiliated with Anthropic.
 
 ## Experimental: Tiivoo 2
 

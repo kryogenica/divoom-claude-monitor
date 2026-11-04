@@ -13,6 +13,7 @@ Subcommands:
   status                            prints the sessions the monitor knows about
   config [NAME [VALUE | --default]] lists, shows or changes settings (applied within a second)
   break [reset]                     shows the break timer, or restarts it after a real break
+  clawd [MINUTES | off]             shows Clawd now for a few minutes (default 5), even while busy
 
 Protocol notes come from the community reverse-engineering work at
 https://github.com/bugzmanov/divoom-minitoo (FINDINGS.md). Only commands documented
@@ -33,6 +34,7 @@ CACHE = HOME / ".cache" / "minitoo"
 SESSIONS = CACHE / "sessions"
 PAUSED = CACHE / "paused"
 STRETCH = CACHE / "break.json"
+CLAWD_DEMO = CACHE / "clawd-demo"  # holds the time until which `minitoo clawd` keeps Clawd out
 CONFIG = HOME / ".config" / "minitoo" / "config.json"
 
 # name: (default, description). `minitoo config` lists and changes these.
@@ -42,6 +44,9 @@ SETTINGS = {
     "break_reset_minutes": (60, "minutes with no new job that end the stretch and clear the break screen"),
     "break_sound": ("coffee", 'break screen sound: "coffee" (footsteps, pour, gulp, aaah) or "chime"'),
     "glow": (False, "glow running squares (3 steps, or 2 when the screen is busy); big animations have frozen the speaker"),
+    "clawd": (False, "show Clawd, the Claude Code mascot, once nothing has run for a while"),
+    "clawd_after_minutes": (20, "minutes with nothing running or waiting before Clawd comes out"),
+    "clawd_awake_minutes": (60, "minutes Clawd plays before falling asleep; asleep, the screen updates once a minute"),
     "alert_seconds": (6, "seconds the full-screen NEEDS YOU alert stays up"),
     "done_expire_minutes": (10, "minutes finished sessions stay on screen as grey blocks"),
     "stale_expire_hours": (12, "hours without news before a session is dropped"),
@@ -59,7 +64,7 @@ SETTINGS = {
 DEFAULTS = {name: default for name, (default, _) in SETTINGS.items()}
 LIMITS = {"volume": (0, 100), "break_after_minutes": (1, 24 * 60), "break_reset_minutes": (1, 24 * 60),
           "alert_seconds": (0, 600), "done_expire_minutes": (0, 24 * 60), "stale_expire_hours": (1, 24 * 14),
-          "channel": (1, 30)}
+          "channel": (1, 30), "clawd_after_minutes": (1, 24 * 60), "clawd_awake_minutes": (1, 24 * 60)}
 CHOICES = {"break_sound": ("coffee", "chime")}
 
 W, H = 160, 128
@@ -526,6 +531,8 @@ GLOW_SHORT = [1.0, 0.0]  # used when the 3-step glow would be too big
 # Uploads of 9.5 KB and 20 KB have stalled the speaker; about 7.5 KB has been fine.
 MAX_ANIMATION_BYTES = 7600
 ANIMATION_GAP = 10  # seconds between animation uploads
+CLAWD_EVERY, CLAWD_ASLEEP_EVERY = 10, 60  # seconds between Clawd's clips, awake and asleep
+CLAWD_SIM = 3.0  # seconds of Clawd's life per clip, so it moves on calmly between uploads
 
 
 def compose(sessions, alert, stretch_start=None, finished_today=0, reset_minutes=60, glow=None, blink=True):
@@ -765,7 +772,16 @@ def log(msg):
     print(time.strftime("%H:%M:%S"), msg, flush=True)
 
 
+def clawd_demo_until():
+    try:
+        return float(CLAWD_DEMO.read_text())
+    except (OSError, ValueError):
+        return 0.0
+
+
 def daemon():
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from clawd import Clawd, is_night
     cfg = config()
     cfg["mac"] = find_speaker(cfg)
     while not cfg["mac"]:
@@ -783,6 +799,7 @@ def daemon():
     finished, finished_day = set(), time.strftime("%Y-%m-%d")
     names = AppNames(cfg)
     glow = cfg["glow"]
+    clawd, clawd_clip, next_clawd, clawd_ok, last_busy = None, None, 0.0, True, time.time()
     stretch, stretch_mtime = read_stretch(), file_mtime(STRETCH)
     cfg_mtime = file_mtime(CONFIG)
     log(f"monitor started for {cfg['mac']} channel {cfg['channel']}")
@@ -843,16 +860,45 @@ def daemon():
             stretch = {}
             log("break timer reset: no new job for a while")
         due = cfg["break_screen"] and stretch.get("start") and now - stretch["start"] >= cfg["break_after_minutes"] * 60
-        # Use the longest animation that stays under the size the speaker has handled.
-        for levels, blink, quality in ((GLOW, True, 80), (GLOW, True, 60), (GLOW_SHORT, True, 80),
-                                       (GLOW_SHORT, True, 60), (None, True, 80), (None, False, 80)):
-            if levels and not glow:
-                continue
-            frames, ms, mode = compose(sessions, alert, stretch["start"] if due else None, len(finished),
-                                       cfg["break_reset_minutes"], levels, blink)
-            payload = animation_payload(frames, ms, quality)
-            if len(frames) == 1 or len(payload) <= MAX_ANIMATION_BYTES:
-                break
+
+        # Clawd comes out once nothing has run for a while, or on demand with `minitoo clawd`.
+        if "working" in states.values() or "waiting" in states.values():
+            last_busy = now
+        idle = now - last_busy
+        demo = clawd_demo_until() > now
+        if (demo or cfg["clawd"] and idle >= cfg["clawd_after_minutes"] * 60) and not alert and clawd_ok:
+            if clawd is None:
+                clawd, next_clawd = Clawd(time.time_ns(), is_night(time.localtime().tm_hour), pace=0.45), 0.0
+                log("Clawd came out")
+            if now >= next_clawd:
+                asleep = not demo and idle >= (cfg["clawd_after_minutes"] + cfg["clawd_awake_minutes"]) * 60
+                clawd.night = is_night(time.localtime().tm_hour)
+                if asleep:
+                    clawd.sleep()
+                clawd.advance(CLAWD_SIM)
+                clawd_clip = clawd.clip()
+                next_clawd = now + (CLAWD_ASLEEP_EVERY if asleep else CLAWD_EVERY)
+        elif clawd is not None:
+            clawd = None
+            log("Clawd went home")
+
+        if clawd is not None:
+            (frames, ms), mode, quality = clawd_clip, "clawd", 80
+            payload = animation_payload(frames, ms)
+            if len(payload) > MAX_ANIMATION_BYTES:
+                frames = frames[:1]
+                payload = animation_payload(frames, ms)
+        else:
+            # Use the longest animation that stays under the size the speaker has handled.
+            for levels, blink, quality in ((GLOW, True, 80), (GLOW, True, 60), (GLOW_SHORT, True, 80),
+                                           (GLOW_SHORT, True, 60), (None, True, 80), (None, False, 80)):
+                if levels and not glow:
+                    continue
+                frames, ms, mode = compose(sessions, alert, stretch["start"] if due else None, len(finished),
+                                           cfg["break_reset_minutes"], levels, blink)
+                payload = animation_payload(frames, ms, quality)
+                if len(frames) == 1 or len(payload) <= MAX_ANIMATION_BYTES:
+                    break
         if mode == "break" and not stretch.get("announced"):
             stretch["announced"] = True
             if sound is None and cfg["sound_break"]:
@@ -887,10 +933,15 @@ def daemon():
                 log(f"sent {mode} screen: {len(frames)} frame(s), {len(payload)} bytes, {n} chunks")
             except (OSError, TimeoutError, ConnectionError) as e:
                 dev.close()
-                if glow and len(frames) > 1:
+                if len(frames) > 1 and (glow or mode == "clawd"):
                     # A stalled speaker can freeze on its loading screen; stop animating and let it rest.
-                    glow, next_connect = False, time.time() + 60
-                    log(f"send failed ({e}); glow switched off, reconnecting in 60 s")
+                    what = "Clawd" if mode == "clawd" else "glow"
+                    if mode == "clawd":
+                        clawd, clawd_ok = None, False
+                    else:
+                        glow = False
+                    next_connect = time.time() + 60
+                    log(f"send failed ({e}); {what} switched off until the monitor restarts, reconnecting in 60 s")
                 else:
                     log(f"send failed ({e}); reconnecting")
                     next_connect = time.time() + 3
@@ -961,8 +1012,32 @@ def main(argv):
         return config_command(argv[1:])
     if cmd == "break":
         return break_command(argv[1:])
+    if cmd == "clawd":
+        return clawd_command(argv[1:])
     print(__doc__)
     return 64
+
+
+def clawd_command(args):
+    if args and args[0] == "off":
+        CLAWD_DEMO.unlink(missing_ok=True)
+        print("Clawd went home.")
+        return 0
+    try:
+        minutes = float(args[0]) if args else 5.0
+    except ValueError:
+        print("Usage: minitoo clawd [MINUTES | off]")
+        return 64
+    if not 0 < minutes <= 240:
+        print("Pick between 1 and 240 minutes.")
+        return 64
+    CACHE.mkdir(parents=True, exist_ok=True)
+    CLAWD_DEMO.write_text(str(time.time() + minutes * 60))
+    print(f"Clawd is out for {minutes:g} minutes, even while sessions are running. "
+          "Alerts still take over. 'minitoo clawd off' sends it home.")
+    if PAUSED.exists():
+        print("The monitor is paused; run 'minitoo resume' to see it.")
+    return 0
 
 
 def show_value(v):
