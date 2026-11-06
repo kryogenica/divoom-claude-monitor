@@ -590,10 +590,12 @@ class MiniToo:
 
     def close(self):
         if self.sock:
-            try:
-                self.sock.close()
-            except OSError:
-                pass
+            # shutdown wakes the reader thread; close alone leaves it blocked in recv and the link open
+            for end in (lambda: self.sock.shutdown(socket.SHUT_RDWR), self.sock.close):
+                try:
+                    end()
+                except OSError:
+                    pass
         self.sock = None
 
     @property
