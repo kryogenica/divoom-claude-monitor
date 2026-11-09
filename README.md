@@ -140,7 +140,7 @@ monitor. Settings are stored in `~/.config/minitoo/config.json`, which you can a
 | `break_screen_minutes` | `5` | Minutes the break screen stays up before it clears and the timer starts over. `0` keeps it up until the stretch ends. |
 | `break_reset_minutes` | `60` | Minutes with no new job that end the stretch and clear the break screen. |
 | `break_sound` | `coffee` | `coffee` (footsteps, pour, gulp, "aaah") or `chime`. |
-| `glow` | `false` | The three-step glow on running squares. See the warning below. |
+| `glow` | `false` | A two-step glow on running squares. See the warning below. |
 | `clawd` | `false` | Show Clawd once nothing has run for a while. See [Clawd](#clawd). |
 | `clawd_after_minutes` | `20` | Minutes with nothing running or waiting before Clawd comes out. |
 | `clawd_awake_minutes` | `60` | Minutes Clawd plays before it falls asleep. |
@@ -223,9 +223,14 @@ below was learned on a MiniToo:
 
 - **Keep animations small.** An 8-frame, 20 KB animation froze the screen on a loading spinner, and
   the power button stopped responding until the speaker restarted. A 3-frame, 9.5 KB glow (with three
-  busy projects on screen) stalled it too. Uploads up to about 7.5 KB have been fine, so the monitor
-  caps animations there: when the 3-step glow would be bigger, it uses a 2-step glow or a slightly
-  lower JPEG quality, and otherwise shows the screen without the glow. The glow is off by default.
+  busy projects on screen) stalled it too, and so did 3-frame glows of about 7 KB, twice, after hours
+  of running fine. 2-frame animations of the same size have never frozen it in thousands of uploads,
+  so the glow has only two steps. Uploads are also capped at about 7.5 KB: a bigger glow drops to a
+  slightly lower JPEG quality, and otherwise the screen is shown without the glow. The glow is off by
+  default.
+- **Fewer uploads, fewer freezes.** Each upload carries a small chance of a freeze, so the monitor
+  sends a new screen right away only when a session starts, finishes or needs you. When only the
+  clock and the timers have moved, it waits up to 10 minutes, so those can lag by that much.
   If a glow upload ever fails, the monitor switches the glow off by itself and backs off for a minute.
 - **Only one opcode is used for drawing:** the live animation upload (`0x8B`). The community notes
   this project relies on report that several other commands (`0x40`, `0xA3`, `0xA4`, `0xAD`, `0xAE`)

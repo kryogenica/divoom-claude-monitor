@@ -527,11 +527,11 @@ def draw_break(sessions, stretch_start, finished_today=0, reset_minutes=60, now=
     return img
 
 
-GLOW = [1.0, 0.5, 0.0]  # bright, middle, dim; 8-frame animations froze the speaker, so keep this short
-GLOW_SHORT = [1.0, 0.0]  # used when the 3-step glow would be too big
+GLOW = [1.0, 0.0]  # bright, dim; 3-frame glows froze the speaker 3 times in ~500 uploads, 2-frame ones never
 # Uploads of 9.5 KB and 20 KB have stalled the speaker; about 7.5 KB has been fine.
 MAX_ANIMATION_BYTES = 7600
 ANIMATION_GAP = 10  # seconds between animation uploads
+TICK_EVERY = 600  # seconds; every upload risks a freeze, so changes that only move the clock and timers wait
 CLAWD_EVERY, CLAWD_ASLEEP_EVERY = 10, 60  # seconds between Clawd's clips, awake and asleep
 CLAWD_SIM = 3.0  # seconds of Clawd's life per clip, so it moves on calmly between uploads
 
@@ -798,6 +798,7 @@ def daemon():
     seen_waiting, prev_states = {}, {}
     alert, alert_until = None, 0.0
     last_sig, next_connect, next_upload = None, 0.0, 0.0
+    last_key, last_sent = None, 0.0
     first = True
     finished, finished_day = set(), time.strftime("%Y-%m-%d")
     names = AppNames(cfg)
@@ -898,8 +899,7 @@ def daemon():
                 payload = animation_payload(frames, ms)
         else:
             # Use the longest animation that stays under the size the speaker has handled.
-            for levels, blink, quality in ((GLOW, True, 80), (GLOW, True, 60), (GLOW_SHORT, True, 80),
-                                           (GLOW_SHORT, True, 60), (None, True, 80), (None, False, 80)):
+            for levels, blink, quality in ((GLOW, True, 80), (GLOW, True, 60), (None, True, 80), (None, False, 80)):
                 if levels and not glow:
                     continue
                 frames, ms, mode = compose(sessions, alert, stretch["start"] if due else None, len(finished),
@@ -926,6 +926,8 @@ def daemon():
             play(cfg, sound)
         first = False
         sig = (mode, ms, quality, tuple(f.tobytes() for f in frames))
+        key = (mode, alert and alert["session"], tuple((s["session"], s["state"]) for s in sessions), len(finished))
+        tick_only = last_sig is not None and mode != "clawd" and key == last_key and now - last_sent < TICK_EVERY
 
         if not dev.connected and now >= next_connect:
             try:
@@ -936,10 +938,11 @@ def daemon():
                 next_connect = now + 15
                 log(f"speaker not reachable ({e}); retrying in 15 s")
 
-        if dev.connected and sig != last_sig and now >= next_upload:
+        if dev.connected and sig != last_sig and now >= next_upload and not tick_only:
             try:
                 n = dev.upload_animation(payload)
-                last_sig, next_upload = sig, time.time() + (ANIMATION_GAP if len(frames) > 1 else 3)
+                last_sig, last_key, last_sent = sig, key, time.time()
+                next_upload = last_sent + (ANIMATION_GAP if len(frames) > 1 else 3)
                 log(f"sent {mode} screen: {len(frames)} frame(s), {len(payload)} bytes, {n} chunks")
             except (OSError, TimeoutError, ConnectionError) as e:
                 dev.close()
