@@ -228,10 +228,11 @@ below was learned on a MiniToo:
   so the glow has only two steps. Uploads are also capped at about 7.5 KB: a bigger glow drops to a
   slightly lower JPEG quality, and otherwise the screen is shown without the glow. The glow is off by
   default.
+  If a glow upload ever fails, the monitor switches the glow off by itself and backs off for a minute.
 - **Fewer uploads, fewer freezes.** Each upload carries a small chance of a freeze, so the monitor
   sends a new screen right away only when a session starts, finishes or needs you. When only the
-  clock and the timers have moved, it waits up to 10 minutes, so those can lag by that much.
-  If a glow upload ever fails, the monitor switches the glow off by itself and backs off for a minute.
+  clock and the timers have moved, it refreshes by the longest running timer: every 10 seconds under
+  1 minute, every minute up to 5 minutes, and every 5 minutes after that (or with nothing running).
 - **Only one opcode is used for drawing:** the live animation upload (`0x8B`). The community notes
   this project relies on report that several other commands (`0x40`, `0xA3`, `0xA4`, `0xAD`, `0xAE`)
   and custom icon uploads (`0x3C`) can brick the device. Don't add them.

@@ -531,9 +531,16 @@ GLOW = [1.0, 0.0]  # bright, dim; 3-frame glows froze the speaker 3 times in ~50
 # Uploads of 9.5 KB and 20 KB have stalled the speaker; about 7.5 KB has been fine.
 MAX_ANIMATION_BYTES = 7600
 ANIMATION_GAP = 10  # seconds between animation uploads
-TICK_EVERY = 600  # seconds; every upload risks a freeze, so changes that only move the clock and timers wait
 CLAWD_EVERY, CLAWD_ASLEEP_EVERY = 10, 60  # seconds between Clawd's clips, awake and asleep
 CLAWD_SIM = 3.0  # seconds of Clawd's life per clip, so it moves on calmly between uploads
+
+
+def tick_every(sessions, now):
+    """Seconds a screen that only moved the clock and timers waits; every upload risks a freeze."""
+    longest = max((now - s["since"] for s in sessions if s["state"] == "working"), default=None)
+    if longest is None or longest > 300:
+        return 300
+    return 60 if longest > 60 else 10
 
 
 def compose(sessions, alert, stretch_start=None, finished_today=0, reset_minutes=60, glow=None, blink=True):
@@ -927,7 +934,7 @@ def daemon():
         first = False
         sig = (mode, ms, quality, tuple(f.tobytes() for f in frames))
         key = (mode, alert and alert["session"], tuple((s["session"], s["state"]) for s in sessions), len(finished))
-        tick_only = last_sig is not None and mode != "clawd" and key == last_key and now - last_sent < TICK_EVERY
+        tick_only = last_sig is not None and mode != "clawd" and key == last_key and now - last_sent < tick_every(sessions, now)
 
         if not dev.connected and now >= next_connect:
             try:
