@@ -188,8 +188,9 @@ restore it. Energy also sinks at night (20:00–06:00), when the sky turns dark 
 fireflies come out. Rain showers and shooting stars break in at random. Every behaviour also makes its
 own random choices, like how many hops, which dance, or whether the firefly gets caught.
 
-On the speaker, Clawd moves in short 2-frame clips, one every 10 seconds, each under the animation size
-cap. After `clawd_awake_minutes` it falls asleep, and the screen then changes once a minute.
+On the speaker, Clawd moves in short 2-frame clips, one every 30 seconds, each under the animation size
+cap. After `clawd_awake_minutes` it falls asleep, and one looping sleeping clip stays up until a job
+starts, with no more uploads.
 
 **Clawd belongs to Anthropic.** It is Anthropic's mascot for Claude Code, and its design and name are
 Anthropic's. This project doesn't claim any ownership of Clawd and isn't affiliated with or endorsed by

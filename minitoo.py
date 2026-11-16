@@ -47,7 +47,7 @@ SETTINGS = {
     "glow": (False, "glow running squares (3 steps, or 2 when the screen is busy); big animations have frozen the speaker"),
     "clawd": (False, "show Clawd, the Claude Code mascot, once nothing has run for a while"),
     "clawd_after_minutes": (20, "minutes with nothing running or waiting before Clawd comes out"),
-    "clawd_awake_minutes": (60, "minutes Clawd plays before falling asleep; asleep, the screen updates once a minute"),
+    "clawd_awake_minutes": (60, "minutes Clawd plays before falling asleep; asleep, one looping clip and no more uploads"),
     "alert_seconds": (6, "seconds the full-screen NEEDS YOU alert stays up"),
     "done_expire_minutes": (10, "minutes finished sessions stay on screen as grey blocks"),
     "stale_expire_hours": (12, "hours without news before a session is dropped"),
@@ -531,8 +531,8 @@ GLOW = [1.0, 0.0]  # bright, dim; 3-frame glows froze the speaker 3 times in ~50
 # Uploads of 9.5 KB and 20 KB have stalled the speaker; about 7.5 KB has been fine.
 MAX_ANIMATION_BYTES = 7600
 ANIMATION_GAP = 10  # seconds between animation uploads
-CLAWD_EVERY, CLAWD_ASLEEP_EVERY = 10, 60  # seconds between Clawd's clips, awake and asleep
-CLAWD_SIM = 3.0  # seconds of Clawd's life per clip, so it moves on calmly between uploads
+CLAWD_EVERY = 30  # seconds between Clawd's clips; a 2-frame clip froze the speaker after ~8,000 at 10 s
+CLAWD_SIM = 9.0  # seconds of Clawd's life per clip, so it still gets through its behaviours
 
 
 def tick_every(sessions, now):
@@ -893,7 +893,7 @@ def daemon():
                     clawd.sleep()
                 clawd.advance(CLAWD_SIM)
                 clawd_clip = clawd.clip()
-                next_clawd = now + (CLAWD_ASLEEP_EVERY if asleep else CLAWD_EVERY)
+                next_clawd = float("inf") if asleep else now + CLAWD_EVERY  # asleep, one looping clip is enough
         elif clawd is not None:
             clawd = None
             log("Clawd went home")
